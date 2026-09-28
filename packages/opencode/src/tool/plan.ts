@@ -8,6 +8,7 @@ import { MessageV2 } from "../session/message-v2"
 import { Provider } from "@/provider/provider"
 import { InstanceState } from "@/effect/instance-state"
 import { MessageID, PartID } from "../session/schema"
+import { SessionCompaction } from "../session/compaction"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
 
 export const Parameters = Schema.Struct({})
@@ -18,6 +19,7 @@ export const PlanExitTool = Tool.define(
     const session = yield* Session.Service
     const question = yield* Question.Service
     const provider = yield* Provider.Service
+    const compaction = yield* SessionCompaction.Service
 
     return {
       description: EXIT_DESCRIPTION,
@@ -31,11 +33,11 @@ export const PlanExitTool = Tool.define(
             sessionID: ctx.sessionID,
             questions: [
               {
-                question: `Plan at ${plan} is complete. Would you like to switch to the build agent and start implementing?`,
+                question: `Plan at ${plan} is complete. Would you like to switch to the build agent, compact the previous context, and start implementing?`,
                 header: "Build Agent",
                 custom: false,
                 options: [
-                  { label: "Yes", description: "Switch to build agent and start implementing the plan" },
+                  { label: "Yes", description: "Compact context, switch to build agent, and implement the plan" },
                   { label: "No", description: "Stay with plan agent to continue refining the plan" },
                 ],
               },
@@ -67,10 +69,16 @@ export const PlanExitTool = Tool.define(
             text: `The plan at ${plan} has been approved, you can now edit files. Execute the plan`,
             synthetic: true,
           } satisfies SessionV1.TextPart)
+          yield* compaction.create({
+            sessionID: ctx.sessionID,
+            agent: "build",
+            model,
+            auto: true,
+          })
 
           return {
-            title: "Switching to build agent",
-            output: "User approved switching to build agent. Wait for further instructions.",
+            title: "Compacting context and switching to build agent",
+            output: "User approved compacting the previous context and switching to build agent. Wait for further instructions.",
             metadata: {},
           }
         }).pipe(Effect.orDie),
